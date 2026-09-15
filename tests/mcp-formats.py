@@ -20,6 +20,7 @@ def session(commands, setting):
     result = subprocess.run([binary, "mcp"], input="\n".join(map(json.dumps, requests))+"\n", text=True, capture_output=True, env=env, timeout=90)
     assert result.returncode == 0, result.stderr
     replies = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{')]
+    assert all("result" in reply for reply in replies), {"replies": replies, "stderr": result.stderr}
     return [r["result"] for r in replies]
 
 
