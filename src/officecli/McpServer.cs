@@ -70,7 +70,8 @@ public static class McpServer
         // redirected (see UpdateChecker.SpawnRefreshProcess), so
         // nothing it does can corrupt our stdout JSON-RPC stream.
         using var upgradeCts = new CancellationTokenSource();
-        var upgradeTask = FormatPolicy.Restricted ? Task.CompletedTask : RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
+        var skipUpgrade = FormatPolicy.Restricted || Environment.GetEnvironmentVariable("OFFICECLI_SKIP_UPDATE") == "1";
+        var upgradeTask = skipUpgrade ? Task.CompletedTask : RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
 
         try
         {

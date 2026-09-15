@@ -1,4 +1,5 @@
 """Black-box regression test against the compiled stdio MCP, no third-party packages."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import sys
 import tempfile
 
 binary = str(Path(sys.argv[1]).resolve())
+original_hash = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
 
 
 def session(commands, setting):
@@ -58,4 +60,5 @@ with tempfile.TemporaryDirectory(prefix="mcp formats ") as temp:
     finally:
         os.chdir(original_cwd)
 
+assert hashlib.sha256(Path(binary).read_bytes()).hexdigest() == original_hash, "Tests must not update the pinned binary"
 print("PASS: restricted discovery, help, skills, execution, Word/Excel, and unrestricted CLI")
