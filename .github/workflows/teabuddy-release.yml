@@ -1,0 +1,51 @@
+name: TeaBuddy OfficeCLI release
+on:
+  push:
+    tags: ['teabuddy-*']
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, rid: linux-x64, asset: officecli-linux-x64, binary: officecli}
+          - {os: ubuntu-24.04-arm, rid: linux-arm64, asset: officecli-linux-arm64, binary: officecli}
+          - {os: macos-15-intel, rid: osx-x64, asset: officecli-mac-x64, binary: officecli}
+          - {os: macos-15, rid: osx-arm64, asset: officecli-mac-arm64, binary: officecli}
+          - {os: windows-latest, rid: win-x64, asset: officecli-win-x64.exe, binary: officecli.exe}
+          - {os: windows-11-arm, rid: win-arm64, asset: officecli-win-arm64.exe, binary: officecli.exe}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet publish src/officecli/officecli.csproj -c Release -r ${{ matrix.rid }} -o publish --nologo
+      - run: python tests/mcp-formats.py publish/${{ matrix.binary }}
+      - shell: bash
+        run: |
+          mkdir release-assets
+          cp publish/${{ matrix.binary }} release-assets/${{ matrix.asset }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/*
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - run: cd assets && sha256sum officecli-* > SHA256SUMS
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" assets/* --title "OfficeCLI for TeaBuddy $RELEASE_TAG" --notes "Based on upstream v1.0.148. Adds MCP allowed-format policy; TeaBuddy enables docx,xlsx. Standalone CLI retains preview support. All six platform binaries pass the MCP protocol regression checks."

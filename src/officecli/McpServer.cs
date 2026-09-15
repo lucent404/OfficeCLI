@@ -1,5 +1,6 @@
 // Copyright 2026 OfficeCLI (https://OfficeCLI.AI)
 // SPDX-License-Identifier: Apache-2.0
+// TeaBuddy fork: add opt-in MCP document-format restrictions.
 
 using System.CommandLine;
 using System.Reflection;
@@ -18,6 +19,7 @@ namespace OfficeCli;
 /// </summary>
 public static class McpServer
 {
+    private static readonly McpFormatPolicy FormatPolicy = new(Environment.GetEnvironmentVariable("OFFICECLI_MCP_ALLOWED_FORMATS"));
     public static async Task RunAsync()
     {
         using var reader = new StreamReader(Console.OpenStandardInput());
@@ -68,7 +70,8 @@ public static class McpServer
         // redirected (see UpdateChecker.SpawnRefreshProcess), so
         // nothing it does can corrupt our stdout JSON-RPC stream.
         using var upgradeCts = new CancellationTokenSource();
-        var upgradeTask = RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
+        var skipUpgrade = FormatPolicy.Restricted || Environment.GetEnvironmentVariable("OFFICECLI_SKIP_UPDATE") == "1";
+        var upgradeTask = skipUpgrade ? Task.CompletedTask : RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
 
         try
         {
@@ -283,6 +286,8 @@ public static class McpServer
     private static (IReadOnlyList<McpContent> Contents, bool IsError) ExecuteCommandLine(JsonElement args)
     {
         var argv = ExtractArgv(args);
+        var scopedHelp = FormatPolicy.Validate(argv);
+        if (scopedHelp != null) return (new[] { new McpContent("text", Text: scopedHelp) }, false);
         if (argv.Length == 0)
             throw new ArgumentException("Provide the officecli command line as `command`, e.g. "
                 + "command=\"help\" or command=\"add deck.pptx /slide[1] --type shape --prop text=Hi\".");
@@ -376,7 +381,8 @@ public static class McpServer
             name ??= a;
         }
         if (string.IsNullOrEmpty(name))
-            return OfficeCli.Core.SkillInstaller.BuildSkillCatalog();
+            return FormatPolicy.Restricted ? FormatPolicy.SkillCatalog : OfficeCli.Core.SkillInstaller.BuildSkillCatalog();
+        if (FormatPolicy.Restricted) FormatPolicy.ValidateSkill(name);
         return string.IsNullOrEmpty(relPath)
             ? OfficeCli.Core.SkillInstaller.LoadSkillContent(name)
             : OfficeCli.Core.SkillInstaller.LoadSkillFile(name, relPath);
@@ -539,7 +545,7 @@ Delivery gate (before reporting a document finished — any failure = fix and re
         // Append a compact always-on skill-trigger summary so the agent is
         // prompted to load the right skill without the full ~1.2k of routing
         // descriptions resident in context. Detail stays lazy behind load_skill.
-        w.WriteString("description", ToolDescription + "\n\n" + McpHelpStrategy + "\n"
+        w.WriteString("description", FormatPolicy.Restricted ? FormatPolicy.Description : ToolDescription + "\n\n" + McpHelpStrategy + "\n"
             + OfficeCli.Core.SkillInstaller.BuildSkillTriggerSummary());
         w.WriteStartObject("inputSchema");
         w.WriteString("type", "object");
@@ -550,7 +556,7 @@ Delivery gate (before reporting a document finished — any failure = fix and re
         w.WriteStartObject("command");
         w.WriteStartArray("type"); w.WriteStringValue("string"); w.WriteStringValue("array"); w.WriteEndArray();
         w.WriteStartObject("items"); w.WriteString("type", "string"); w.WriteEndObject();
-        w.WriteString("description",
+        w.WriteString("description", FormatPolicy.Restricted ? FormatPolicy.CommandDescription :
             "The officecli command line — either a single string (e.g. \"add deck.pptx /slide[1] --type shape --prop text=Hi\") "
             + "or a pre-split argv array of strings (use the array form when an argument contains spaces or quotes). A leading "
             + "'officecli' is optional. Examples: \"help\" lists commands; \"help pptx shape\" shows an element's schema; "
