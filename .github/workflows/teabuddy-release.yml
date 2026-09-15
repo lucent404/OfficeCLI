@@ -29,12 +29,12 @@ jobs:
       - run: python tests/mcp-formats.py publish/${{ matrix.binary }}
       - shell: bash
         run: |
-          mkdir assets
-          cp publish/${{ matrix.binary }} assets/${{ matrix.asset }}
+          mkdir release-assets
+          cp publish/${{ matrix.binary }} release-assets/${{ matrix.asset }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset }}
-          path: assets/*
+          path: release-assets/*
   release:
     needs: build
     runs-on: ubuntu-latest
