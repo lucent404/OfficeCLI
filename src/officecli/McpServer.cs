@@ -1,5 +1,6 @@
 // Copyright 2026 OfficeCLI (https://OfficeCLI.AI)
 // SPDX-License-Identifier: Apache-2.0
+// TeaBuddy fork: add opt-in MCP document-format restrictions.
 
 using System.CommandLine;
 using System.Reflection;
@@ -69,7 +70,7 @@ public static class McpServer
         // redirected (see UpdateChecker.SpawnRefreshProcess), so
         // nothing it does can corrupt our stdout JSON-RPC stream.
         using var upgradeCts = new CancellationTokenSource();
-        var upgradeTask = RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
+        var upgradeTask = FormatPolicy.Restricted ? Task.CompletedTask : RunPeriodicUpgradeCheckAsync(upgradeCts.Token);
 
         try
         {

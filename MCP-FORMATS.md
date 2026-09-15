@@ -19,7 +19,8 @@ This is an MCP capability restriction, not an operating-system sandbox. The
 standalone executable retains all formats for application-managed preview and
 other internal use. A separate shell tool can still invoke that executable.
 Clients must also remove all-format OfficeCLI instructions from their own system
-prompts. Restart the MCP process after changing the setting.
+prompts. Restart the MCP process after changing the setting. Restricted MCP mode also
+skips the periodic upstream update check so it cannot replace the fork binary.
 
 Validation: `dotnet publish src/officecli/officecli.csproj -c Release -r linux-x64
 -o publish`, then `python3 tests/mcp-formats.py publish/officecli`. GitHub workflow
