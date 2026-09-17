@@ -25,3 +25,17 @@ skips the periodic upstream update check so it cannot replace the fork binary.
 Validation: `dotnet publish src/officecli/officecli.csproj -c Release -r linux-x64
 -o publish`, then `python3 tests/mcp-formats.py publish/officecli`. GitHub workflow
 `MCP format policy` performs the same black-box tests on every fork branch push.
+
+## MCP execution progress
+
+For `tools/call` requests that include `params._meta.progressToken`, the server
+emits `notifications/progress` at command start, before each locally executed
+batch item, and after the command returns (including save/disposal). String and
+numeric tokens are preserved. Progress values are monotonically increasing
+milestones, not percentages; completion can still return a tool error. Calls
+without a token keep the existing response-only behavior.
+
+No periodic keepalive is sent: a stuck open/save or resident request can still
+time out. Resident execution reports the outer start/end only. TeaBuddy configures
+a 300,000 ms OfficeCLI request timeout; OpenCode resets this wait on real progress.
+OpenCode currently consumes notifications without displaying their messages.

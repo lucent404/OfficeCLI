@@ -68,6 +68,7 @@ static partial class CommandBuilder
         for (int bi = 0; bi < items.Count; bi++)
         {
             var item = items[bi];
+            CommandProgress.Report($"正在执行第 {bi + 1}/{items.Count} 项操作");
             if (skipResidentOnlyCommands)
             {
                 var cmd = (item.Command ?? "").ToLowerInvariant();

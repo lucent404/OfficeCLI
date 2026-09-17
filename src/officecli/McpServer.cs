@@ -119,7 +119,7 @@ public static class McpServer
                         "initialize" => HandleInitialize(id),
                         "notifications/initialized" => null,
                         "tools/list" => HandleToolsList(id),
-                        "tools/call" => HandleToolsCall(id, root),
+                        "tools/call" => HandleToolsCallWithProgress(id, root, writer),
                         "ping" => WriteJson(w => { w.WriteStartObject(); Rpc(w, id); w.WriteStartObject("result"); w.WriteEndObject(); w.WriteEndObject(); }),
                         // CONSISTENCY(mcp-error): truncate caller-supplied value to prevent
                         // response amplification (echo arbitrary-length input back unchanged).
@@ -203,6 +203,43 @@ public static class McpServer
         w.WriteEndObject();
         w.WriteEndObject();
     });
+
+    private static string HandleToolsCallWithProgress(JsonElement? id, JsonElement root, TextWriter writer)
+    {
+        // Only send progress when requested. Write to the transport directly:
+        // ExecuteCommandLine captures Console.Out for the final tool result.
+        if (!root.TryGetProperty("params", out var p) || p.ValueKind != JsonValueKind.Object
+            || !p.TryGetProperty("_meta", out var meta) || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("progressToken", out var token)
+            || token.ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+            return HandleToolsCall(id, root);
+
+        var previous = CommandProgress.Sink.Value;
+        var progress = 0;
+        CommandProgress.Sink.Value = message =>
+        {
+            writer.WriteLine(WriteJson(w =>
+            {
+                w.WriteStartObject();
+                w.WriteString("jsonrpc", "2.0");
+                w.WriteString("method", "notifications/progress");
+                w.WriteStartObject("params");
+                w.WritePropertyName("progressToken"); token.WriteTo(w);
+                w.WriteNumber("progress", progress++);
+                w.WriteString("message", message);
+                w.WriteEndObject(); w.WriteEndObject();
+            }));
+            writer.Flush();
+        };
+        try
+        {
+            CommandProgress.Report("开始执行 OfficeCLI 操作");
+            var response = HandleToolsCall(id, root);
+            CommandProgress.Report("OfficeCLI 执行结束，正在返回结果");
+            return response;
+        }
+        finally { CommandProgress.Sink.Value = previous; }
+    }
 
     private static string HandleToolsCall(JsonElement? id, JsonElement root)
     {
