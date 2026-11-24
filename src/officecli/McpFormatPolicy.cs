@@ -1,6 +1,9 @@
 // Copyright 2026 OfficeCLI contributors
 // SPDX-License-Identifier: Apache-2.0
 
+using System.Text.Encodings.Web;
+using System.Text.Json;
+
 namespace OfficeCli;
 
 /// <summary>MCP-only format policy. The standalone CLI and preview handlers are unchanged.</summary>
@@ -38,10 +41,33 @@ internal sealed class McpFormatPolicy
     public string Help => $"Enabled formats: {FormatList}\nCommands: {string.Join(", ", FileCommands)}\n"
         + "Syntax: <verb> <file> [arguments]. The file must immediately follow the verb.\n"
         + "help <format> [verb] [element] — format-specific schemas.\n"
+        + "help batch — batch item fields and executable MCP examples.\n"
         + $"load_skill <name> [--path <relative-file>] — available guides: {SkillList}.\n"
         + "Use load_skill for examples, validate <file> and view <file> issues to check the document, "
         + "and view <file> screenshot for visual review. Append --json for structured results.";
     public string SkillCatalog => $"Available guides: {SkillList}.\nUse load_skill <name> or load_skill <name> --path <relative-file>.";
+
+    private static string BatchHelp(IEnumerable<string> formats)
+    {
+        var examples = formats.Select(format =>
+        {
+            var items = format switch
+            {
+                "docx" => """[{"command":"add","parent":"/body","type":"paragraph","props":{"text":"Hello"}},{"command":"get","path":"/body/p[1]"}]""",
+                "xlsx" => """[{"command":"set","path":"/Sheet1/A1","props":{"value":"Hello"}},{"command":"get","path":"/Sheet1/A1"}]""",
+                "pptx" => """[{"command":"add","parent":"/","type":"slide"},{"command":"get","path":"/slide[1]"}]""",
+                _ => throw new ArgumentOutOfRangeException(nameof(format)),
+            };
+            var quotedItems = JsonEncodedText.Encode(items, JavaScriptEncoder.UnsafeRelaxedJsonEscaping);
+            return $$"""{"command":["batch","example.{{format}}","--commands","{{quotedItems}}","--json"]}""";
+        });
+        return "batch <file> --commands <json-array> [--json]\n"
+            + "Pass command as an array of strings. The entire JSON array is one string argument after --commands. "
+            + "Use --input <file> to read the array from a JSON file. By default any failure rolls back all changes. "
+            + "Use --best-effort to keep successful changes or --stop-on-error to stop at the first failure.\n\n"
+            + CommandBuilder.BatchItemHelp + "\n\n"
+            + "MCP tool arguments for a blank document created with create:\n" + string.Join("\n", examples);
+    }
 
     private static string Normalize(string name) => name.ToLowerInvariant() switch
     {
@@ -66,16 +92,20 @@ internal sealed class McpFormatPolicy
         var verb = argv[0];
         if (verb is "help" or "--help" or "-h" or "/?")
         {
+            if (argv is [_, "batch", ..]) return BatchHelp(Formats.Where(allowed.Contains));
             if (argv.Length < 2 || argv[1] == "all" || FileCommands.Contains(argv[1])) return Help;
-            if (!allowed.Contains(Normalize(argv[1])))
+            var format = Normalize(argv[1]);
+            if (!allowed.Contains(format))
                 throw new ArgumentException($"This help format is not enabled. Enabled formats: {FormatList}.");
+            if (argv.Length >= 3 && string.Equals(argv[2], "batch", StringComparison.OrdinalIgnoreCase)) return BatchHelp([format]);
             if (argv.Skip(2).Any(a => a is "--help" or "-h" or "/?")) return Help;
             return null;
         }
         if (verb is "load_skill" or "skill" or "skills") return null; // validated before loading the guide
         if (!FileCommands.Contains(verb))
             throw new ArgumentException($"This command is not enabled. Run help for available commands. Enabled formats: {FormatList}.");
-        if (argv.Any(a => a is "--help" or "-h" or "/?")) return Help;
+        if (argv.Any(a => a is "--help" or "-h" or "/?"))
+            return verb == "batch" ? BatchHelp(Formats.Where(allowed.Contains)) : Help;
         if (argv.Length < 2) throw new ArgumentException("Provide the document path immediately after the command.");
         ValidateFile(argv[1]);
         if (verb == "merge")

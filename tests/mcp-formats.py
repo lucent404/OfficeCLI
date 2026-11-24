@@ -26,6 +26,16 @@ def session(commands, setting):
     return [r["result"] for r in replies]
 
 
+def batch_examples(reply, expected_formats):
+    assert not reply.get("isError"), reply
+    text = "\n".join(item["text"] for item in reply["content"])
+    assert "--commands" in text and "--input" in text, text
+    examples = [json.loads(line)["command"] for line in text.splitlines() if line.lstrip().startswith('{"command"')]
+    assert all(command[0] == "batch" for command in examples), examples
+    assert {Path(command[1]).suffix[1:] for command in examples} == expected_formats, text
+    return examples
+
+
 with tempfile.TemporaryDirectory(prefix="mcp formats ") as temp:
     original_cwd = os.getcwd()
     try:
@@ -50,6 +60,28 @@ with tempfile.TemporaryDirectory(prefix="mcp formats ") as temp:
         assert not Path("blocked deck.pptx").exists()
         assert not Path("BLOCKED.PPTX").exists()
         assert Path("report.docx").exists() and Path("book.xlsx").exists()
+        for setting in ("docx,xlsx", "pptx"):
+            formats = set(setting.split(","))
+            commands = ["help batch", ["batch", "--help"]]
+            commands += [["help", fmt, "batch"] for fmt in sorted(formats)]
+            disabled = "pptx" if "docx" in formats else "docx"
+            commands.append(["help", disabled, "batch"])
+            _, by_name, by_flag, *scoped, blocked = session(commands, setting)
+            examples = batch_examples(by_name, formats)
+            assert batch_examples(by_flag, formats) == examples
+            assert disabled not in json.dumps(by_name).lower()
+            if disabled == "pptx":
+                assert "/slide" not in json.dumps(by_name).lower()
+            for fmt, reply in zip(sorted(formats), scoped, strict=True):
+                batch_examples(reply, {fmt})
+            assert blocked.get("isError"), blocked
+            # Replay the literal MCP examples against blank documents, just as a caller would.
+            for command in examples:
+                _, created, edited = session([["create", command[1]], command], setting)
+                assert not created.get("isError"), created
+                assert not edited.get("isError"), edited
+                summary = json.loads(edited["content"][0]["text"])["data"]["summary"]
+                assert summary["total"] == summary["succeeded"] >= 2, summary
         # Default behavior, including the standalone CLI, stays compatible.
         default = session(["create default.pptx"], None)
         assert "pptx" in json.dumps(default[0])
@@ -61,4 +93,4 @@ with tempfile.TemporaryDirectory(prefix="mcp formats ") as temp:
         os.chdir(original_cwd)
 
 assert hashlib.sha256(Path(binary).read_bytes()).hexdigest() == original_hash, "Tests must not update the pinned binary"
-print("PASS: restricted discovery, help, skills, execution, Word/Excel, and unrestricted CLI")
+print("PASS: restricted discovery, batch help and its runnable examples, skills, execution, Word/Excel, and unrestricted CLI")

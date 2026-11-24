@@ -9,20 +9,18 @@ namespace OfficeCli;
 
 static partial class CommandBuilder
 {
-    // Shown as the `batch` command's help/description. The flags alone don't
-    // tell a caller (or an agent) what each JSON array ITEM looks like — the
-    // single most common batch mistake is stuffing a whole CLI line into
-    // "command" (e.g. {"command":"add /slide[1] --type shape --prop ..."}),
-    // which fails with "Unknown command". Document the per-item shape and a
-    // concrete example here so `help batch` actually teaches it.
-    private const string BatchHelpDescription =
-        "Execute multiple commands from a JSON array in a single pass. Standalone, this is one open/save cycle; through a live resident the items apply in memory and the disk write is deferred to save/close/idle-autosave — adaptive 2-10s after going idle, or before the batch returns under OFFICECLI_RESIDENT_FLUSH=each (officecli's own reads still see the changes immediately).\n\n"
-        + "Each array item is an OBJECT whose \"command\" is the bare verb "
+    // The CLI and restricted MCP use the same item schema with different examples.
+    internal const string BatchItemHelp =
+        "Each array item is an OBJECT whose \"command\" is the bare verb "
         + "(add/set/remove/move/swap/get/query/...); the verb's arguments are SIBLING fields, "
         + "not a CLI string inside \"command\". Common fields: \"parent\" (add target), "
         + "\"path\" (set/remove/get target), \"selector\" (query filter; \"path\" is accepted as an alias), \"type\" (element type for add), "
         + "\"props\" (a key->value map of --prop values), \"to\"/\"after\"/\"before\" (move), "
-        + "\"path2\" (swap's second path).\n\n"
+        + "\"path2\" (swap's second path).";
+
+    private const string BatchHelpDescription =
+        "Execute multiple commands from a JSON array in a single pass. Standalone, this is one open/save cycle; through a live resident the items apply in memory and the disk write is deferred to save/close/idle-autosave — adaptive 2-10s after going idle, or before the batch returns under OFFICECLI_RESIDENT_FLUSH=each (officecli's own reads still see the changes immediately).\n\n"
+        + BatchItemHelp + "\n\n"
         + "Pass the array via --commands, or as the same JSON on stdin / --input <file>. Example:\n"
         + "[\n"
         + "  {\"command\":\"add\",\"parent\":\"/slide[1]\",\"type\":\"shape\",\"props\":{\"text\":\"Hi\",\"x\":\"1cm\",\"y\":\"2cm\"}},\n"
