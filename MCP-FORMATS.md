@@ -13,7 +13,9 @@ or a screenshot is rendered, including string and argv-array forms. Guides for
 disabled formats cannot be loaded. Restricted calls use `<verb> <file>` ordering;
 response files and process/plugin management commands are not exposed. `help
 <enabled-format> ...` retains the upstream schema reference. Generic command
-help directs callers to enabled guides rather than returning all-format examples.
+help directs callers to enabled guides. `help batch` and `batch --help` show
+the batch item fields and runnable MCP examples for the enabled formats.
+Use `help <enabled-format> batch` for a single format's example.
 
 This is an MCP capability restriction, not an operating-system sandbox. The
 standalone executable retains all formats for application-managed preview and
